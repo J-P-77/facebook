@@ -581,3 +581,143 @@ func (session *Session) WithContext(ctx context.Context) *Session {
 	s.context = ctx
 	return &s
 }
+
+func (session *Session) sendPostRequestCB(progress Progress, uri string, params Params, res interface{}) (*http.Response, error) {
+	session.prepareParams(params)
+
+	buf := &bytes.Buffer{}
+
+	mime, err := params.Encode(buf)
+
+	if err != nil {
+		return nil, fmt.Errorf("cannot encode POST params. %v", err)
+	}
+
+	var request *http.Request
+
+	request, err = http.NewRequest("POST", uri, buf)
+
+	if progress != nil {
+		request.Body = NewProgressReadCloser(request.Body, progress, request.ContentLength)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	request.Header.Set("Content-Type", mime)
+	response, data, err := session.sendRequest(request)
+
+	if err != nil {
+		return response, err
+	}
+
+	err = makeResult(data, res)
+	return response, err
+}
+
+func (session *Session) graphCB(progress Progress, path string, method Method, params Params) (res Result, err error) {
+	var graphUrl string
+
+	if params == nil {
+		params = Params{}
+	}
+
+	// always format as json.
+	params["format"] = "json"
+
+	// overwrite method as we always use post
+	params["method"] = method
+
+	// get graph api url.
+	if session.isVideoPost(path, method) {
+		graphUrl = session.getUrl("graph_video", path, nil)
+	} else {
+		graphUrl = session.getUrl("graph", path, nil)
+	}
+
+	var response *http.Response
+	response, err = session.sendPostRequestCB(progress, graphUrl, params, &res)
+	session.addDebugInfo(res, response)
+
+	if res != nil {
+		err = res.Err()
+	}
+
+	return
+}
+
+func (session *Session) ApiCB(progress Progress, path string, method Method, params Params) (Result, error) {
+	return session.graphCB(progress, path, method, params)
+}
+
+func (session *Session) PostCB(progress Progress, path string, params Params) (Result, error) {
+	return session.ApiCB(progress, path, POST, params)
+}
+
+type Progress func(value int64)
+
+type ProgressReadCloser struct {
+	io.ReadCloser
+
+	cb func(int64)
+
+	size   int64
+	read   chan int
+	closed bool
+}
+
+func (p *ProgressReadCloser) Read(b []byte) (int, error) {
+	n, err := p.ReadCloser.Read(b)
+
+	p.read <- n
+
+	return n, err
+}
+
+func (p *ProgressReadCloser) Close() error {
+	if p.closed {
+		return nil
+	}
+
+	close(p.read)
+	p.closed = true
+	return p.ReadCloser.Close()
+}
+
+func (p *ProgressReadCloser) update() {
+	var read int64
+
+	var previous int64 = -1
+	for {
+		n, ok := <-p.read
+
+		if !ok {
+			break
+		}
+
+		read += int64(n)
+
+		current := int64(100 * (float64(read) / float64(p.size)))
+
+		if current < 0 || current > 100 {
+			fmt.Printf("INVALID PERCENT - percent: %v read: %v size: %v\n", current, read, p.size)
+		}
+
+		if current != previous {
+			p.cb(current)
+			previous = current
+		}
+
+	}
+
+	p.cb(-1)
+}
+
+func NewProgressReadCloser(rc io.ReadCloser, cb func(int64), size int64) *ProgressReadCloser {
+	p := &ProgressReadCloser{rc, cb, size, make(chan int), false}
+
+	go p.update()
+
+	return p
+}
