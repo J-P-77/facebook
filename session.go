@@ -621,8 +621,9 @@ func (session *Session) sendPostRequestCB(progress Progress, uri string, params 
 
 	request, err = http.NewRequest("POST", uri, buf)
 
+	//This wrappers request body (aka the buffered file [request.Body = buf])
 	if progress != nil {
-		request.Body = NewProgressReadCloser(request.Body, progress, request.ContentLength)
+		request.Body = newProgressReadCloser(request.Body, progress, request.ContentLength)
 	}
 
 	if err != nil {
@@ -655,9 +656,9 @@ func (session *Session) graphCB(progress Progress, path string, method Method, p
 
 	// get graph api url.
 	if session.isVideoPost(path, method) {
-		graphUrl = session.getUrl("graph_video", path, nil)
+		graphUrl = session.getURL("graph_video", path, nil)
 	} else {
-		graphUrl = session.getUrl("graph", path, nil)
+		graphUrl = session.getURL("graph", path, nil)
 	}
 
 	var response *http.Response
@@ -686,7 +687,7 @@ type ProgressReadCloser struct {
 
 	cb func(int64)
 
-	size   int64
+	length int64
 	read   chan int
 	closed bool
 }
@@ -710,7 +711,7 @@ func (p *ProgressReadCloser) Close() error {
 }
 
 func (p *ProgressReadCloser) update() {
-	var read int64
+	var readcount int64
 
 	var previous int64 = -1
 	for {
@@ -720,26 +721,26 @@ func (p *ProgressReadCloser) update() {
 			break
 		}
 
-		read += int64(n)
+		readcount += int64(n)
 
-		current := int64(100 * (float64(read) / float64(p.size)))
+		//Calulate percent
+		current := int64(100 * (float64(readcount) / float64(p.length)))
 
 		if current < 0 || current > 100 {
-			fmt.Printf("INVALID PERCENT - percent: %v read: %v size: %v\n", current, read, p.size)
+			fmt.Printf("INVALID PERCENT - percent: %v read: %v length: %v\n", current, readcount, p.length)
 		}
 
 		if current != previous {
 			p.cb(current)
 			previous = current
 		}
-
 	}
 
 	p.cb(-1)
 }
 
-func NewProgressReadCloser(rc io.ReadCloser, cb func(int64), size int64) *ProgressReadCloser {
-	p := &ProgressReadCloser{rc, cb, size, make(chan int), false}
+func newProgressReadCloser(rc io.ReadCloser, cb func(int64), length int64) *ProgressReadCloser {
+	p := &ProgressReadCloser{rc, cb, length, make(chan int), false}
 
 	go p.update()
 
