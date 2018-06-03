@@ -623,7 +623,7 @@ func (session *Session) sendPostRequestCB(progress Progress, uri string, params 
 
 	//This wrappers request body (aka the buffered file [request.Body = buf])
 	if progress != nil {
-		request.Body = newProgressReadCloser(request.Body, progress, request.ContentLength)
+		request.Body = NewProgressReadCloser(request.Body, progress, request.ContentLength)
 	}
 
 	if err != nil {
@@ -680,33 +680,36 @@ func (session *Session) PostCB(progress Progress, path string, params Params) (R
 	return session.ApiCB(progress, path, POST, params)
 }
 
-type Progress func(value int64)
+type Progress func(percent int64)
 
 type ProgressReadCloser struct {
 	io.ReadCloser
 
-	cb func(int64)
+	callback Progress
 
 	length int64
 	read   chan int
-	closed bool
 }
 
 func (p *ProgressReadCloser) Read(b []byte) (int, error) {
 	n, err := p.ReadCloser.Read(b)
 
-	p.read <- n
+	if err != nil {
+		p.read <- -1
+	} else {
+		p.read <- n
+	}
 
 	return n, err
 }
 
 func (p *ProgressReadCloser) Close() error {
-	if p.closed {
+	if p.read == nil {
 		return nil
 	}
 
 	close(p.read)
-	p.closed = true
+	p.read = nil
 	return p.ReadCloser.Close()
 }
 
@@ -717,7 +720,7 @@ func (p *ProgressReadCloser) update() {
 	for {
 		n, ok := <-p.read
 
-		if !ok {
+		if !ok || n == -1 {
 			break
 		}
 
@@ -731,16 +734,16 @@ func (p *ProgressReadCloser) update() {
 		}
 
 		if current != previous {
-			p.cb(current)
+			p.callback(current)
 			previous = current
 		}
 	}
 
-	p.cb(-1)
+	p.callback(-1)
 }
 
-func newProgressReadCloser(rc io.ReadCloser, cb func(int64), length int64) *ProgressReadCloser {
-	p := &ProgressReadCloser{rc, cb, length, make(chan int), false}
+func NewProgressReadCloser(rc io.ReadCloser, callback func(int64), length int64) *ProgressReadCloser {
+	p := &ProgressReadCloser{rc, callback, length, make(chan int)}
 
 	go p.update()
 
