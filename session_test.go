@@ -11,6 +11,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -326,4 +328,41 @@ func TestSessionCancelationWithContext(t *testing.T) {
 	}
 
 	t.Logf("http request error should fail as cancelled. [e:%v]", err)
+}
+
+func TestInspectAppAccessToken(t *testing.T) {
+	app := New(FB_TEST_APP_ID, FB_TEST_APP_SECRET)
+	session := app.Session(app.AppAccessToken())
+
+	_, err := session.Inspect()
+
+	if err != nil {
+		t.Fatalf("fail to inspect app access token. [e:%v]", err)
+	}
+}
+
+func TestSessionWithCustomBaseUrl(t *testing.T) {
+	testMux := http.NewServeMux()
+	numCalls := 0
+	testMux.HandleFunc("/v3.0/me", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"name": "some-user"}`))
+		numCalls++
+	})
+
+	srv := httptest.NewServer(testMux)
+	defer srv.Close()
+
+	session := &Session{
+		Version: "v3.0",
+		BaseURL: srv.URL + "/",
+	}
+	_, err := session.Get("/me", nil)
+	if err != nil {
+		t.Fatalf("request to custom base URL failed: %v", err)
+	}
+	if numCalls != 1 {
+		t.Fatal("no call to mock server")
+	}
 }

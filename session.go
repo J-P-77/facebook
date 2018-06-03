@@ -49,8 +49,10 @@ var (
 // Session holds a facebook session with an access token.
 // Session should be created by App.Session or App.SessionFromSignedRequest.
 type Session struct {
-	HttpClient HttpClient
-	Version    string // facebook versioning.
+	HttpClient        HttpClient
+	Version           string // facebook versioning.
+	RFC3339Timestamps bool   // set to true to send date_format=Y-m-d\TH:i:sP on every request which will cause RFC3339 style timestamps to be returned
+	BaseURL           string // set to override API base URL - trailing slash is required, e.g. http://127.0.0.1:53453/
 
 	accessToken string // facebook access token. can be empty.
 	app         *App
@@ -338,6 +340,10 @@ func (session *Session) graph(path string, method Method, params Params) (res Re
 	// overwrite method as we always use post
 	params["method"] = method
 
+	if RFC3339Timestamps || session.RFC3339Timestamps {
+		params["date_format"] = `Y-m-d\TH:i:sP`
+	}
+
 	// get graph api url.
 	if session.isVideoPost(path, method) {
 		graphURL = session.getURL("graph_video", path, nil)
@@ -527,7 +533,11 @@ func (session *Session) getURL(name, path string, params Params) string {
 	}
 
 	buf := &bytes.Buffer{}
-	buf.WriteString(domainMap[name])
+	baseURL := domainMap[name]
+	if session.BaseURL != "" {
+		baseURL = session.BaseURL
+	}
+	buf.WriteString(baseURL)
 
 	// facebook versioning.
 	if session.Version == "" {
