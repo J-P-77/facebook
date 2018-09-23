@@ -1,7 +1,7 @@
 // A facebook graph api client in go.
 // https://github.com/huandu/facebook/
 //
-// Copyright 2012 - 2015, Huan Du
+// Copyright 2012, Huan Du
 // Licensed under the MIT license
 // https://github.com/huandu/facebook/blob/master/LICENSE
 
@@ -61,7 +61,7 @@ func TestSession(t *testing.T) {
 
 	// Global version overwrite default session version.
 	func() {
-		Version = "v2.2"
+		Version = FB_LATEST_VERSION
 		defer func() {
 			Version = ""
 		}()
@@ -72,7 +72,7 @@ func TestSession(t *testing.T) {
 	// Session version overwrite default version.
 	func() {
 		Version = "vx.y" // an invalid version.
-		session.Version = "v2.2"
+		session.Version = FB_LATEST_VERSION
 		defer func() {
 			Version = ""
 		}()
@@ -101,19 +101,22 @@ func TestUploadingBinary(t *testing.T) {
 		t.Skipf("skip this case as we don't have a valid access token.")
 	}
 
+	t.Skipf("facebook doesn't support uploading photo to timeline.")
+
 	buf := bytes.NewBufferString(FB_TEST_BINARY_JPG_FILE)
 	reader := base64.NewDecoder(base64.StdEncoding, buf)
 
 	session := &Session{}
 	session.SetAccessToken(FB_TEST_VALID_ACCESS_TOKEN)
 
-	result, e := session.Api("/me/photos", POST, Params{
-		"message": "Test photo from https://github.com/huandu/facebook",
-		"source":  Data("my_profile.jpg", reader),
+	result, e := session.Api("/317426148998929/photos", POST, Params{
+		"caption":   "Test photo from https://github.com/huandu/facebook",
+		"source":    Data("attachment.jpg", reader),
+		"published": true,
 	})
 
 	if e != nil {
-		t.Fatalf("cannot create photo on my timeline. [e:%v]", e)
+		t.Fatalf("cannot create photo on page timeline. [e:%v]", e)
 	}
 
 	var id string
@@ -179,9 +182,9 @@ func TestGraphDebuggingAPI(t *testing.T) {
 		session.SetAccessToken(FB_TEST_VALID_ACCESS_TOKEN)
 		defer session.SetAccessToken("")
 
-		// test app must not grant "read_friendlists" permission.
+		// test app must not grant "read_friends" permission.
 		// otherwise there is no way to get a warning from facebook.
-		res, _ := session.Get("/me/friendlists", nil)
+		res, _ := session.Get("/me/friends", nil)
 
 		if res == nil {
 			t.Fatalf("res must not be nil.")
@@ -196,7 +199,7 @@ func TestGraphDebuggingAPI(t *testing.T) {
 		t.Logf("facebook response is: %v", res)
 		t.Logf("debug info is: %v", *debugInfo)
 
-		if debugInfo.Messages == nil && len(debugInfo.Messages) > 0 {
+		if len(debugInfo.Messages) == 0 {
 			t.Fatalf("facebook must warn me for the permission issue.")
 		}
 
@@ -224,7 +227,7 @@ func TestGraphDebuggingAPI(t *testing.T) {
 		Version = ""
 	}()
 
-	Version = "v2.2"
+	Version = FB_LATEST_VERSION
 	Debug = DEBUG_ALL
 	test(t, defaultSession)
 	session := &Session{}
@@ -365,4 +368,35 @@ func TestSessionWithCustomBaseUrl(t *testing.T) {
 	if numCalls != 1 {
 		t.Fatal("no call to mock server")
 	}
+}
+
+func TestSessionGetWithQueryString(t *testing.T) {
+	if FB_TEST_VALID_ACCESS_TOKEN == "" {
+		t.Skipf("skip this case as we don't have a valid access token.")
+	}
+
+	session := &Session{}
+	session.SetAccessToken(FB_TEST_VALID_ACCESS_TOKEN)
+
+	id, err := session.User()
+
+	if err != nil {
+		t.Fatalf("cannot get current user id. [e:%v]", err)
+	}
+
+	t.Logf("current user id is %v", id)
+
+	result, e := session.Api("me?fields=name,email", GET, Params{
+		"fields": "id,name",
+	})
+
+	if e != nil {
+		t.Fatalf("cannot get my extended info. [e:%v]", e)
+	}
+
+	if result.Get("name") == nil || result.Get("email") == nil {
+		t.Fatalf("fail to get my extend info. [result:%v]", result)
+	}
+
+	t.Logf("my extended info is: %v", result)
 }

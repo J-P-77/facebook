@@ -1,7 +1,7 @@
 // A facebook graph api client in go.
 // https://github.com/huandu/facebook/
 //
-// Copyright 2012 - 2015, Huan Du
+// Copyright 2012, Huan Du
 // Licensed under the MIT license
 // https://github.com/huandu/facebook/blob/master/LICENSE
 
@@ -12,7 +12,7 @@ type Error struct {
 	Message      string
 	Type         string
 	Code         int
-	ErrorSubcode int // subcode for authentication related errors.
+	ErrorSubcode int    // subcode for authentication related errors.
 	UserTitle    string `json:"error_user_title"`
 	UserMessage  string `json:"error_user_msg"`
 	IsTransient  bool   `json:"is_transient"`

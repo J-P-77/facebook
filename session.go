@@ -1,7 +1,7 @@
 // A facebook graph api client in go.
 // https://github.com/huandu/facebook/
 //
-// Copyright 2012 - 2015, Huan Du
+// Copyright 2012, Huan Du
 // Licensed under the MIT license
 // https://github.com/huandu/facebook/blob/master/LICENSE
 
@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 )
 
 // Graph API debug mode values.
@@ -211,7 +212,7 @@ func (session *Session) Validate() (err error) {
 
 // Inspect Session access token.
 // Returns JSON array containing data about the inspected token.
-// See https://developers.facebook.com/docs/facebook-login/manually-build-a-login-flow/v2.2#checktoken
+// See https://developers.facebook.com/docs/facebook-login/manually-build-a-login-flow/#checktoken
 func (session *Session) Inspect() (result Result, err error) {
 	if session.accessToken == "" && session.HttpClient == nil {
 		err = fmt.Errorf("access token is not set")
@@ -258,7 +259,7 @@ func (session *Session) AccessToken() string {
 	return session.accessToken
 }
 
-// Sets a new access token.
+// SetAccessToken sets a new access token.
 func (session *Session) SetAccessToken(token string) {
 	if token != session.accessToken {
 		session.id = ""
@@ -334,25 +335,72 @@ func (session *Session) graph(path string, method Method, params Params) (res Re
 		params = Params{}
 	}
 
-	// always format as json.
+	// always use JSON format.
 	params["format"] = "json"
-
-	// overwrite method as we always use post
-	params["method"] = method
 
 	if RFC3339Timestamps || session.RFC3339Timestamps {
 		params["date_format"] = `Y-m-d\TH:i:sP`
 	}
 
+	session.prepareParams(params)
+
+	// parse path only if path contains '?'.
+	// url.ParseRequestURI cannot parse uri without "/" like "me".
+	if strings.Contains(path, "?") {
+		// make sure the path starts with a slash.
+		if path[0] != '/' {
+			path = "/" + path
+		}
+
+		// parse query string in path.
+		u, e := url.ParseRequestURI(path)
+
+		if e != nil {
+			err = e
+			return
+		}
+
+		path = u.Path
+
+		if u.RawQuery != "" {
+			query, e := url.ParseQuery(u.RawQuery)
+
+			if e != nil {
+				err = e
+				return
+			}
+
+			// use these queries to overwrite the value in params.
+			for k := range query {
+				params[k] = query.Get(k)
+			}
+		}
+	}
+
+	var urlParams Params
+
+	if method == GET {
+		urlParams = params
+	}
+
 	// get graph api url.
 	if session.isVideoPost(path, method) {
-		graphURL = session.getURL("graph_video", path, nil)
+		graphURL = session.getURL("graph_video", path, urlParams)
 	} else {
-		graphURL = session.getURL("graph", path, nil)
+		graphURL = session.getURL("graph", path, urlParams)
 	}
 
 	var response *http.Response
-	response, err = session.sendPostRequest(graphURL, params, &res)
+
+	if method == GET {
+		response, err = session.sendGetRequest(graphURL, &res)
+	} else {
+		if method != POST {
+			params["method"] = method
+		}
+
+		response, err = session.sendPostRequest(graphURL, params, &res)
+	}
 
 	if response != nil {
 		session.addDebugInfo(res, response)
@@ -372,10 +420,11 @@ func (session *Session) graphBatch(batchParams Params, params ...Params) ([]Resu
 	}
 
 	batchParams["batch"] = params
+	session.prepareParams(batchParams)
 
 	var res []Result
-	graphUrl := session.getURL("graph", "", nil)
-	_, err := session.sendPostRequest(graphUrl, batchParams, &res)
+	graphURL := session.getURL("graph", "", nil)
+	_, err := session.sendPostRequest(graphURL, batchParams, &res)
 	return res, err
 }
 
@@ -413,8 +462,6 @@ func (session *Session) sendGetRequest(uri string, res interface{}) (*http.Respo
 }
 
 func (session *Session) sendPostRequest(uri string, params Params, res interface{}) (*http.Response, error) {
-	session.prepareParams(params)
-
 	buf := &bytes.Buffer{}
 	mime, err := params.Encode(buf)
 
@@ -422,9 +469,7 @@ func (session *Session) sendPostRequest(uri string, params Params, res interface
 		return nil, fmt.Errorf("cannot encode POST params. %v", err)
 	}
 
-	var request *http.Request
-
-	request, err = http.NewRequest("POST", uri, buf)
+	request, err := http.NewRequest("POST", uri, buf)
 
 	if err != nil {
 		return nil, err
@@ -450,9 +495,7 @@ func (session *Session) sendOauthRequest(uri string, params Params) (Result, err
 		return nil, fmt.Errorf("cannot encode POST params. %v", err)
 	}
 
-	var request *http.Request
-
-	request, err = http.NewRequest("POST", urlStr, buf)
+	request, err := http.NewRequest("POST", urlStr, buf)
 
 	if err != nil {
 		return nil, err

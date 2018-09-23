@@ -1,18 +1,18 @@
 // A facebook graph api client in go.
 // https://github.com/huandu/facebook/
 //
-// Copyright 2012 - 2015, Huan Du
+// Copyright 2012, Huan Du
 // Licensed under the MIT license
 // https://github.com/huandu/facebook/blob/master/LICENSE
 
 package facebook
 
+// Constants for test cases.
 const (
 	FB_TEST_APP_ID     = "169186383097898"
 	FB_TEST_APP_SECRET = "b2e4262c306caa3c7f5215d2d099b319"
 
 	// remeber to change it to a valid token to run test
-	//FB_TEST_VALID_ACCESS_TOKEN = "CAACZA38ZAD8CoBAFCaVgLBNdz0RrH45yUBUA95exI1FY5i4mZBY5iULfM3YEpS53nP6eSF4cf3nmoiePHvMkdSZApkxu1heAupW7OE8tmiySRZAYkZBZBvhveCZCgPaJlFovlI0ZAhWdWTLxxmJaZCKDG0B8n9VGEvcN3zoS1AHjokSz4aNos39xthp7XtAz9X3NRvp1qU4UTOlxK8IJOC1ApAMmvcEE0kWvgZD"
 	FB_TEST_VALID_ACCESS_TOKEN = ""
 
 	// remember to change it to a valid signed request to run test
@@ -101,8 +101,15 @@ const (
 		"tl8v0nUjyYMVr1K0ML5m2UjHNjsVeZ8h4V1x4DK2Exjnp8u/L479hVnTUFh4DTq8WX7LFwPS" +
 		"V04qCwqXpy7iQWkl0NcpQF435Sd8ZziioOQEpQlKUAJAwBjsKKr5iRXgIvpWFdqKKaEKVemf" +
 		"/Vj+3M/7KqEo3vK/LRRR6XJ9/dm8+nb4HFC7R/yinDA9wfL9qKK01Hpopp/UOs0UUUAWf//Z"
+
+	FB_LATEST_VERSION = "v3.1"
 )
 
 var (
-	testGlobalApp = New(FB_TEST_APP_ID, FB_TEST_APP_SECRET)
+	testGlobalApp *App
 )
+
+func init() {
+	testGlobalApp = New(FB_TEST_APP_ID, FB_TEST_APP_SECRET)
+	testGlobalApp.EnableAppsecretProof = true
+}

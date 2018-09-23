@@ -1,7 +1,7 @@
 // A facebook graph api client in go.
 // https://github.com/huandu/facebook/
 //
-// Copyright 2012 - 2015, Huan Du
+// Copyright 2012, Huan Du
 // Licensed under the MIT license
 // https://github.com/huandu/facebook/blob/master/LICENSE
 
@@ -12,7 +12,7 @@ import (
 )
 
 func TestApiGetUserInfoV2(t *testing.T) {
-	Version = "v2.2"
+	Version = FB_LATEST_VERSION
 	defer func() {
 		Version = ""
 	}()
@@ -80,7 +80,7 @@ func TestBatchApiGetInfo(t *testing.T) {
 		}
 		params2 := Params{
 			"method":       GET,
-			"relative_url": uint64(100002828925788), // id of my another facebook account
+			"relative_url": "100002828925788", // id of my another facebook account
 		}
 
 		results, err := BatchApi(FB_TEST_VALID_ACCESS_TOKEN, params1, params2)
@@ -108,8 +108,8 @@ func TestBatchApiGetInfo(t *testing.T) {
 	Version = ""
 	test(t)
 
-	// User "v2.2".
-	Version = "v2.2"
+	// User FB_LATEST_VERSION.
+	Version = FB_LATEST_VERSION
 	defer func() {
 		Version = ""
 	}()
@@ -146,4 +146,25 @@ func TestGraphError(t *testing.T) {
 	}
 
 	t.Logf("facebook error. [e:%v] [message:%v] [type:%v] [code:%v] [subcode:%v]", err, fbErr.Message, fbErr.Type, fbErr.Code, fbErr.ErrorSubcode)
+}
+
+func TestGetAdaccounts(t *testing.T) {
+	if FB_TEST_VALID_ACCESS_TOKEN == "" {
+		t.Skipf("skip this case as we don't have a valid access token.")
+	}
+
+	result, e := Get("/v3.1/me/adaccounts", Params{
+		"fields":       "id,name,currency",
+		"access_token": FB_TEST_VALID_ACCESS_TOKEN,
+	})
+
+	if e != nil {
+		t.Fatalf("cannot get my adaccounts info. [e:%v]", e)
+	}
+
+	if result.Get("data") == nil {
+		t.Fatalf("fail to get my adaccounts info. [result:%v]", result)
+	}
+
+	t.Logf("my adaccounts info is: %v", result)
 }
